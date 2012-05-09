@@ -131,17 +131,17 @@
                     var dTime = new Date();
                     var hours = dTime.getHours();
                     var minutes = Math.floor(dTime.getMinutes() / this.minuteStep) * this.minuteStep;
-
                     var meridian = "AM";
-                    if (hours === 0) {
-                        hours = 12;
-                    } else if (hours > 12) {
-                        hours = hours - 12;
-                        meridian = "PM";
-                    } else {
-                       meridian = "AM";
+                    if ( this.showMeridian ){
+                        if (hours === 0) {
+                            hours = 12;
+                        } else if (hours > 12) {
+                            hours = hours - 12;
+                            meridian = "PM";
+                        } else {
+                           meridian = "AM";
+                        }
                     }
-
                     this.hour = hours;
                     this.minute = minutes;
                     this.meridian = meridian;
@@ -171,7 +171,7 @@
         , updateElement: function() {
             var time = this.getTime();
 
-            this.$element.val(time);
+            this.$element.val(time).change();
         }
 
         , updateWidget: function() {
