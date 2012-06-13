@@ -32,6 +32,10 @@ build:
 	@cat docs/assets/js/copyright.js docs/assets/js/bootstrap.min.tmp.js > docs/assets/js/bootstrap.min.js
 	@rm docs/assets/js/copyright.js docs/assets/js/bootstrap.min.tmp.js
 	@echo "Compiling and minifying javascript...       ${CHECK} Done"
+	@cp docs/assets/js/bootstrap.js docs/assets/js/bootstrap.min.js ../../public/javascripts/
+	@cp ${BOOTSTRAP} ../../public/stylesheets/
+	@cp ${BOOTSTRAP_RESPONSIVE} ../../public/stylesheets/
+	@echo "Copying to project...                       ${CHECK} Done"
 	@echo "\n${HR}"
 	@echo "Bootstrap successfully built at ${DATE}."
 	@echo "${HR}\n"
