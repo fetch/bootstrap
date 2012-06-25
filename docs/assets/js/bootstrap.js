@@ -1873,6 +1873,14 @@
 			});
 		} else {
 			if (this.component){
+				// For components that are not readonly, allow keyboard nav
+				this.element.find('input').on({
+					focus: $.proxy(this.show, this),
+					blur: $.proxy(this._hide, this),
+					keyup: $.proxy(this.update, this),
+					keydown: $.proxy(this.keydown, this)
+				});
+
 				this.component.on('click', $.proxy(this.show, this));
 				element = this.element.find('input');
 				element.on({
@@ -1979,14 +1987,14 @@
 		},
 
 		setValue: function() {
-			var formated = DPGlobal.formatDate(this.date, this.format, this.language);
+			var formatted = DPGlobal.formatDate(this.date, this.format, this.language);
 			if (!this.isInput) {
 				if (this.component){
-					this.element.find('input').prop('value', formated);
+					this.element.find('input').prop('value', formatted);
 				}
-				this.element.data('date', formated);
+				this.element.data('date', formatted);
 			} else {
-				this.element.prop('value', formated);
+				this.element.prop('value', formatted);
 			}
 		},
 
@@ -2018,7 +2026,7 @@
 
 		update: function(){
 			this.date = DPGlobal.parseDate(
-				this.isInput ? this.element.prop('value') : this.element.data('date'),
+				this.isInput ? this.element.prop('value') : this.element.data('date') || this.element.find('input').prop('value'),
 				this.format, this.language
 			);
 			if (this.date < this.startDate) {
@@ -2064,7 +2072,8 @@
 			this.updateNavArrows();
 			this.fillMonths();
 			var prevMonth = new Date(year, month-1, 28,0,0,0,0),
-				day = DPGlobal.getDaysInMonth(prevMonth.getFullYear(), prevMonth.getMonth());
+				day = DPGlobal.getDaysInMonth(prevMonth.getFullYear(), prevMonth.getMonth()),
+				prevDate, dstDay = 0, date;
 			prevMonth.setDate(day);
 			prevMonth.setDate(day - (prevMonth.getDay() - this.weekStart + 7)%7);
 			var nextMonth = new Date(prevMonth),
@@ -2088,11 +2097,42 @@
 				if (prevMonth.valueOf() < this.startDate || prevMonth.valueOf() > this.endDate) {
 					clsName += ' disabled';
 				}
-				html.push('<td class="day'+clsName+'">'+prevMonth.getDate() + '</td>');
+				date = prevMonth.getDate();
+				if (dstDay == -1) date++;
+				html.push('<td class="day'+clsName+'">'+date+ '</td>');
 				if (prevMonth.getDay() == this.weekEnd) {
 					html.push('</tr>');
 				}
+				prevDate = prevMonth.getDate();
 				prevMonth.setDate(prevMonth.getDate()+1);
+				if (prevMonth.getHours() !== 0) {
+					// Fix for DST bug: if we are no longer at start of day, a DST jump probably happened
+					// We either fell back (eg, Jan 1 00:00 -> Jan 1 23:00)
+					// or jumped forward   (eg, Jan 1 00:00 -> Jan 2 01:00)
+					// Unfortunately, I can think of no way to test this in the unit tests, as it depends
+					// on the TZ of the client system.
+					if (!dstDay) {
+						// We are not currently handling a dst day (next round will deal with it)
+						if (prevMonth.getDate() == prevDate)
+							// We must compensate for fall-back
+							dstDay = -1;
+						else
+							// We must compensate for a jump-ahead
+							dstDay = +1;
+					}
+					else {
+						// The last round was our dst day (hours are still non-zero)
+						if (dstDay == -1)
+							// For a fall-back, fast-forward to next midnight
+							prevMonth.setHours(24);
+						else
+							// For a jump-ahead, just reset to 0
+							prevMonth.setHours(0);
+						// Reset minutes, as some TZs may be off by portions of an hour
+						prevMonth.setMinutes(0);
+						dstDay = 0;
+					}
+				}
 			}
 			this.picker.find('.datepicker-days tbody').empty().append(html.join(''));
 			var currentYear = this.date.getFullYear();
@@ -2192,6 +2232,7 @@
 						break;
 					case 'span':
 						if (!target.is('.disabled')) {
+							this.viewDate.setDate(1);
 							if (target.is('.month')) {
 								month = target.parent().find('span').index(target);
 								this.viewDate.setMonth(month);
@@ -2475,44 +2516,54 @@
 			}
 			parts = date ? date.match(this.nonpunctuation) : [];
 			date = new Date();
-			var val, filtered;
+			var parsed = {},
+				setters_order = ['yyyy', 'yy', 'M', 'MM', 'm', 'mm', 'd', 'dd'],
+				setters_map = {
+					yyyy: function(d,v){ return d.setFullYear(v); },
+					yy: function(d,v){ return d.setFullYear(2000+v); },
+					m: function(d,v){
+						v -= 1;
+						while (v<0) v += 12;
+						v %= 12;
+						d.setMonth(v);
+						while (d.getMonth() != v)
+							d.setDate(d.getDate()-1);
+						return d;
+					},
+					d: function(d,v){ return d.setDate(v); }
+				},
+				val, filtered;
+			setters_map.M = setters_map.MM = setters_map.mm = setters_map.m;
+			setters_map.dd = setters_map.d;
 			date = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0);
 			if (parts.length == format.parts.length) {
 				var date_filter = function(){
 					var m = this.slice(0, parts[i].length),
-					p = parts[i].slice(0, m.length);
+						p = parts[i].slice(0, m.length);
 					return m == p;
 				};
 				for (i=0; i < format.parts.length; i++) {
-					val = parseInt(parts[i], 10)||1;
-					switch(format.parts[i]) {
-						case 'MM':
-							filtered = $(dates[language].months).filter(date_filter);
-							val = $.inArray(filtered[0], dates[language].months) + 1;
-							break;
-						case 'M':
-							filtered = $(dates[language].monthsShort).filter(date_filter);
-							val = $.inArray(filtered[0], dates[language].monthsShort) + 1;
-							break;
+					val = parseInt(parts[i], 10);
+					part = format.parts[i];
+					if (isNaN(val)) {
+						switch(part) {
+							case 'MM':
+								filtered = $(dates[language].months).filter(date_filter);
+								val = $.inArray(filtered[0], dates[language].months) + 1;
+								break;
+							case 'M':
+								filtered = $(dates[language].monthsShort).filter(date_filter);
+								val = $.inArray(filtered[0], dates[language].monthsShort) + 1;
+								break;
+						}
 					}
-					switch(format.parts[i]) {
-						case 'dd':
-						case 'd':
-							date.setDate(val);
-							break;
-						case 'mm':
-						case 'm':
-						case 'MM':
-						case 'M':
-							date.setMonth(val - 1);
-							break;
-						case 'yy':
-							date.setFullYear(2000 + val);
-							break;
-						case 'yyyy':
-							date.setFullYear(val);
-							break;
-					}
+					parsed[part] = val;
+				}
+				var s;
+				for (i=0; i<setters_order.length; i++){
+					s = setters_order[i];
+					if (s in parsed)
+						setters_map[s](date, parsed[s])
 				}
 			}
 			return date;
