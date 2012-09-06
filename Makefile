@@ -14,7 +14,7 @@ install:
 	@cp docs/assets/js/bootstrap.js docs/assets/js/bootstrap.min.js ../../public/javascripts/
 	@cp ${BOOTSTRAP} ../../public/stylesheets/
 	@cp ${BOOTSTRAP_RESPONSIVE} ../../public/stylesheets/
-	@cp img/* ../../public/images/bootstrap/
+	@cp font/* ../../public/images/bootstrap/
 	@echo "Copying to project...                       ${CHECK} Done"
 	
 #
